@@ -1,4 +1,4 @@
-# Improved ADME Prediction by Multitask Pretraining on Predicted Data: Insights from the ASAP-Polaris-OpenADMET Blind Challenge 
+# Code and entry report for the EUOS25 challenge
 
 
 ### Installation 
@@ -9,6 +9,4 @@ Install [Pytorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/n
 ### Usage examples
 
 
-### Citation
-
-Paper: 
+Report: 

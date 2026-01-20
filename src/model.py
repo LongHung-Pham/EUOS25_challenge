@@ -20,7 +20,7 @@ def GINConvLayer(layer_count, node_dim = 52, edge_dim = 14, h_dim = 256):
 class GNN_net(torch.nn.Module):
     def __init__(self, num_gnn_layers = 5, graph_pooling = "sum", JK = "concat",
                  node_dim = 52, edge_dim = 14,
-                 h_dim = 256, ffn_dim = 64, drop_ratio = 0.2,
+                 h_dim = 512, ffn_dim = 128, drop_ratio = 0.2,
                  task_heads = None):
         """
         Args:
@@ -67,12 +67,12 @@ class GNN_net(torch.nn.Module):
 
         # Shared FFN layers
         if self.JK == "concat":
-            self.shared_ffn = Sequential(Linear(self.node_dim + (self.num_gnn_layers)*h_dim, self.ffn_dim * 2),
+            self.shared_ffn = Sequential(Linear(self.node_dim + (self.num_gnn_layers)*h_dim, self.ffn_dim * 4),
                                          ReLU(),
-                                         Dropout(0.3),
-                                         Linear(self.ffn_dim*2, self.ffn_dim),
+                                         Dropout(0.3),        # original 0.3
+                                         Linear(self.ffn_dim*4, self.ffn_dim),
                                          ReLU(),
-                                         Dropout(0.2)
+                                         Dropout(0.2)         # original 0.2
                                          )
         else:
             self.shared_ffn = Sequential(Linear(h_dim, self.ffn_dim * 2),
@@ -138,10 +138,10 @@ class GNN_net(torch.nn.Module):
             output_dim: Output dimension (default: 1 for regression)
         """
         self.task_predictors[task_name] = nn.Sequential(
-            nn.Linear(self.ffn_dim, self.ffn_dim // 2),
+            nn.Linear(self.ffn_dim, self.ffn_dim // 4),
             nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(self.ffn_dim // 2, output_dim)
+            nn.Dropout(0.4),
+            nn.Linear(self.ffn_dim // 4, output_dim)
         )
         # Update task_heads dictionary
         self.task_heads[task_name] = output_dim
@@ -174,9 +174,10 @@ class GNN_net(torch.nn.Module):
         if task_name is not None:
             # Freeze shared parameters during fine-tuning
             for param in self.gnns.parameters():
-                param.requires_grad = False
+                param.requires_grad = True
             for param in self.batch_norms.parameters():
-                param.requires_grad = False
+                param.requires_grad = True
+
             for param in self.shared_ffn.parameters():
                 param.requires_grad = True        # also train the shared FFN layers
 
