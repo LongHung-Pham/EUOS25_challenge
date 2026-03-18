@@ -7,8 +7,8 @@ import os
 import torch
 
 class PretrainDataset(InMemoryDataset):
-    def __init__(self, root= '/tmp', dataset = 'ADME_Novartis_merged',
-                 xd = None, y_sol = None, y_logd = None, y_hlm = None, y_mlm = None, y_mdck = None,
+    def __init__(self, root= '/tmp', dataset = 'QM_pretrain',
+                 xd = None, target_vars = None,
                  transform = None, pre_transform = None,
                  smile_graph = None):
 
@@ -21,7 +21,7 @@ class PretrainDataset(InMemoryDataset):
             self.data, self.slices = torch.load(self.processed_paths[0], weights_only = False)
         else:
             print('Pre-processed data {} not found, doing pre-processing...'.format(self.processed_paths[0]))
-            self.process(xd, y_sol, y_logd, y_hlm, y_mlm, y_mdck, smile_graph)
+            self.process(xd, target_vars, smile_graph)
             self.data, self.slices = torch.load(self.processed_paths[0], weights_only = False)
 
     @property
@@ -43,32 +43,41 @@ class PretrainDataset(InMemoryDataset):
         if not os.path.exists(self.processed_dir):
             os.makedirs(self.processed_dir)
 
-    def process(self, xd, y_sol, y_logd, y_hlm, y_mlm, y_mdck, smile_graph):
+    def process(self, xd, target_vars, smile_graph):
         '''
-        # Inputs: xd - list of SMILES, y: list of label values
-        # Output:
-        # PyTorch-Geometric format processed data
+        # Inputs: target_vars - dict mapping variable names to arrays, smile_graph - dict of SMILES graphs
+        # Output: PyTorch-Geometric format processed data
         '''
-        assert (len(xd) == len(y_sol) and len(y_sol) == len(y_logd) and len(y_logd) == len(y_hlm)), "The label lists must be the same length!"
-        data_list = []
+        label_vars = {k: v for k, v in target_vars.items()}
+
+        # Check all arrays have same length
         data_len = len(xd)
+        for var_name, var_array in label_vars.items():
+            assert len(var_array) == data_len, f"Variable '{var_name}' length {len(var_array)} doesn't match SMILES length {data_len}"
+
+        data_list = []
         for i in range(data_len):
             print('Converting SMILES to graph: {}/{}'.format(i+1, data_len))
             smiles = xd[i]
-            sol_value, logd_value, hlm_value, mlm_value, mdck_value = y_sol[i], y_logd[i], y_hlm[i], y_mlm[i], y_mdck[i]
             # convert SMILES to molecular representation using rdkit
             c_size, atom_feat, edge_attr, edge_index = smile_graph[smiles]
-            # make the graph ready for PyTorch Geometrics
-            GraphData = DATA.Data(x = torch.FloatTensor(atom_feat),
-                                edge_attr = torch.FloatTensor(edge_attr),
-                                edge_index = torch.LongTensor(edge_index).t().contiguous(),
-                                y_sol = torch.FloatTensor([sol_value]),
-                                y_logd = torch.FloatTensor([logd_value]),
-                                y_hlm = torch.FloatTensor([hlm_value]),
-                                y_mlm = torch.FloatTensor([mlm_value]),
-                                y_mdck = torch.FloatTensor([mdck_value]),
-                                smi = smiles)
+            # base graph data
+            graph_data_dict = {
+                'x': torch.FloatTensor(atom_feat),
+                'edge_attr': torch.FloatTensor(edge_attr),
+                'edge_index': torch.LongTensor(edge_index).t().contiguous(),
+                'smi': smiles
+            }
+            # Add all label variables as attributes
+            for var_name, var_array in label_vars.items():
+                value = var_array[i]
+                # Convert to tensor, handling NaN values
+                if torch.is_tensor(value):
+                    graph_data_dict[var_name] = value.unsqueeze(0) if value.dim() == 0 else value
+                else:
+                    graph_data_dict[var_name] = torch.FloatTensor([float(value)])
 
+            GraphData = DATA.Data(**graph_data_dict)
             GraphData.__setitem__('c_size', torch.LongTensor([c_size]))           # NumAtoms
 
             data_list.append(GraphData)

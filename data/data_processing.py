@@ -86,37 +86,38 @@ def smile_to_graph(smile):            # default no hydrogens
 
 
 def load_drug_smile(smile_csv_file, smile_col_index = 0):
-    reader = csv.reader(open(smile_csv_file))
-    next(reader, None)
-
-    drug_smile = [item[smile_col_index] for item in reader]
+    with open(smile_csv_file) as f:
+      reader = csv.reader(f)
+      next(reader, None)
+      drug_smile = [item[smile_col_index] for item in reader]
 
     smile_graph = {smi: smile_to_graph(smi) for smi in drug_smile}                          # a dict with keys are SMILES,  values are summary of graph (c_size, atom_feat, edge_attr, edge_index)
 
     return drug_smile, smile_graph
 
 
-def get_drug_label_tensor(data_csv_file, smile_col_index = 0):
-    f = open(data_csv_file)      # "Final_data.csv"
-    reader = csv.reader(f)
-    next(reader)
+def get_drug_label_tensor(data_csv_file, smile_col_index, column_map):
 
     drug_smile, smile_graph = load_drug_smile(data_csv_file, smile_col_index = smile_col_index)
+    print('Finished load_drug_smile')
 
-    xd = []
-    y_sol = []
-    y_logd = []
-    y_hlm = []
-    y_mlm = []
-    y_mdck = []
-    for item in reader:
-        xd.append(item[0])
-        y_sol.append(float(item[1]) if item[1] else np.nan)
-        y_logd.append(float(item[2]) if item[2] else np.nan)
-        y_hlm.append(float(item[3]) if item[3] else np.nan)
-        y_mlm.append(float(item[4]) if item[4] else np.nan)
-        y_mdck.append(float(item[5]) if item[5] else np.nan)
+    with open(data_csv_file) as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames or []
 
-    xd, y_sol, y_logd, y_hlm, y_mlm, y_mdck = np.asarray(xd), np.asarray(y_sol), np.asarray(y_logd), np.asarray(y_hlm), np.asarray(y_mlm), np.asarray(y_mdck)
+        # containers for each target variable name
+        xd = []
+        target_vars = {v: [] for v in set(column_map.values())}
 
-    return xd, y_sol, y_logd, y_hlm, y_mlm, y_mdck, smile_graph
+        # Iterate rows and append accordingly
+        for row in reader:
+            xd.append(row.get('std_smiles'))
+            for csv_col, varname in column_map.items():
+                raw_val = row.get(csv_col)
+                target_vars[varname].append(float(raw_val) if raw_val else np.nan)
+
+    # Convert lists to numpy arrays
+    for target, lst in target_vars.items():
+        target_vars[target] = np.asarray(lst)
+
+    return xd, target_vars, smile_graph
