@@ -1,8 +1,8 @@
 numpy==2.0.2
 pandas==2.2.2
 scikit-learn==1.6.1
-torch
-torch_geometric
-rdkit
 networkx==3.5
 scipy==1.16.1
+torch
+torch-geometric
+rdkit
